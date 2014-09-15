@@ -35,10 +35,11 @@ import org.apache.hadoop.util.ToolRunner;
 
 /**
  * 
+ * This file implements Standard Repartition Join from the paper "A Comparison of Join Algorithms for Log Processing in MapReduce"
  * 
- * 
- * 
+ * Author: NGUYEN Ngoc Chau Sang
  */
+
 public class StandardRepartitionJoin extends Configured implements Tool{
 	private int numReducers;
 	private Path refFile;
@@ -52,6 +53,7 @@ public class StandardRepartitionJoin extends Configured implements Tool{
 	      System.exit(0);
 	    }
 	    
+	    // Store args
 	    this.numReducers = Integer.parseInt(args[0]);
 	    this.refFile = new Path(args[1]);
 	    this.logFile = new Path(args[2]);
@@ -63,7 +65,7 @@ public class StandardRepartitionJoin extends Configured implements Tool{
 		Configuration conf = this.getConf();
 	    
 	    /**	If file output is existed, delete it
-	     * 	Delete it from a real MapReduce application
+	     * 	Remove these line of codes from a real MapReduce application
 	     */
 	    FileSystem fs = FileSystem.get(conf);
 	    if(fs.exists(outputDir)){
@@ -119,6 +121,11 @@ class StandardRepartitionJoinRefMapper extends Mapper<LongWritable,
 						Context context) throws IOException, InterruptedException {
 		
 		String[] values = value.toString().split("\t");
+		/**
+		 * Extract the join column from V
+		 * Add a tag of either R or L to V
+		 * Here 0: mean R
+		 */
 		context.write(new Text(values[0]), new TextPair(new Text("0"), new Text(values[1])));
 	}
 }
@@ -133,6 +140,11 @@ class StandardRepartitionJoinLogMapper extends Mapper<LongWritable,
 						Text value, 
 						Context context) throws IOException, InterruptedException {
 		String[] values = value.toString().split("\t");
+		/**
+		 * Extract the join column from V
+		 * Add a tag of either R or L to V
+		 * Here 1: mean L
+		 */
 		context.write(new Text(values[0]), new TextPair(new Text("1"), new Text(values[1] + " - " + values[2])));
 	}
 }
@@ -147,9 +159,14 @@ class StandardRepartitionJoinReducer extends Reducer<Text,
 							Iterable<TextPair> values, 
 							Context context) throws IOException, InterruptedException {
 		Iterator<TextPair> iter = values.iterator();
+		
+		// Create buffers BR and BL for R and L, respectively
 		List<String> ref = new ArrayList<String>();
 		List<String> log = new ArrayList<String>();
 		
+		/**	For each record t in LIST V′ do
+		 *	append t to one of the buffers according to its tag
+		 */
 		TextPair value;
 		while (iter.hasNext()){
 			value = iter.next();
@@ -160,7 +177,9 @@ class StandardRepartitionJoinReducer extends Reducer<Text,
 			}
 		}
 		
-		// For both one-to-one, one-to-many, many-to-many join 
+		/**
+		 * For each pair of records (r, l) in BR × BL do cross product
+		 */
 		for(int i = 0; i < ref.size(); i++)
 			for(int j = 0; j < log.size(); j++)
 				context.write(new Text(log.get(j)), new Text(ref.get(i)));

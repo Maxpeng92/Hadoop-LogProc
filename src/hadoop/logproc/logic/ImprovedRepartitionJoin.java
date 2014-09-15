@@ -3,7 +3,9 @@ package hadoop.logproc.logic;
 import hadoop.logproc.data.TextPair;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 import java.util.StringTokenizer;
 
 import org.apache.hadoop.conf.Configuration;
@@ -19,6 +21,7 @@ import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.WritableComparator;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Partitioner;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.Mapper.Context;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
@@ -32,10 +35,11 @@ import org.apache.hadoop.util.ToolRunner;
 
 /**
  * 
+ * This file implements Improved Repartition Join from the paper "A Comparison of Join Algorithms for Log Processing in MapReduce"
  * 
- * 
- * 
+ * Author: NGUYEN Ngoc Chau Sang
  */
+
 public class ImprovedRepartitionJoin extends Configured implements Tool{
 	private int numReducers;
 	private Path refFile;
@@ -60,7 +64,7 @@ public class ImprovedRepartitionJoin extends Configured implements Tool{
 		Configuration conf = this.getConf();
 	    
 	    /**	If file output is existed, delete it
-	     * 	Delete it from a real MapReduce application
+	     * 	Remove these line of codes from a real MapReduce application
 	     */
 	    FileSystem fs = FileSystem.get(conf);
 	    if(fs.exists(outputDir)){
@@ -68,7 +72,7 @@ public class ImprovedRepartitionJoin extends Configured implements Tool{
 	    }
 	    
 	    // Define new job
-	    Job job = new Job(conf, "StandardRepartitionJoin"); //define new job
+	    Job job = new Job(conf, "ImprovedRepartitionJoin"); //define new job
 	    
 	    
 	    // Set job output format
@@ -86,7 +90,8 @@ public class ImprovedRepartitionJoin extends Configured implements Tool{
 	    job.setReducerClass(ImprovedRepartitionJoinReducer.class);
 	    job.setOutputKeyClass(Text.class);
 	    job.setOutputValueClass(Text.class);
-	    //job.setSortComparatorClass(ValueComparator.class);
+	    job.setPartitionerClass(ImprovedRepartitionJoinPartioner.class);
+	    job.setSortComparatorClass(ValueComparator.class);
 	    
 	    // Set map class and the map output key and value classes
 	    job.setMapOutputKeyClass(Text.class);
@@ -127,58 +132,73 @@ public class ImprovedRepartitionJoin extends Configured implements Tool{
 	}
 }
 
+class ImprovedRepartitionJoinPartioner extends Partitioner<TextPair, TextPair>{
+	 @Override
+	    public int getPartition(TextPair key, TextPair value,
+	        int numPartitions) {
+	    	return (key.getFirst().hashCode()) % numPartitions;
+	    }
+}
+
 class ImprovedRepartitionJoinRefMapper extends Mapper<LongWritable, 
 								Text, 
-								Text, 
+								TextPair, 
 								TextPair> { 
+	private Text zero = new Text("0");
 	@Override
 	protected void map(LongWritable key, 
 						Text value, 
 						Context context) throws IOException, InterruptedException {
 		
 		String[] values = value.toString().split("\t");
-		context.write(new Text(values[0]), new TextPair(new Text("0"), new Text(values[1])));
+		context.write(new TextPair(new Text(values[0]), zero) , new TextPair(new Text("0"), new Text(values[1])));
 	}
 }
 
 class ImprovedRepartitionJoinLogMapper extends Mapper<LongWritable, 
 														Text, 
-														Text, 
+														TextPair, 
 														TextPair> { 
+	private Text one = new Text("1");
 
 	@Override
 	protected void map(LongWritable key, 
 						Text value, 
 						Context context) throws IOException, InterruptedException {
 		String[] values = value.toString().split("\t");
-		context.write(new Text(values[0]), new TextPair(new Text("1"), new Text(values[1] + " - " + values[2])));
+		context.write(new TextPair(new Text(values[0]), one), new TextPair(new Text("1"), new Text(values[1] + " - " + values[2])));
 	}
 }
 
-class ImprovedRepartitionJoinReducer extends Reducer<Text, 
+class ImprovedRepartitionJoinReducer extends Reducer<TextPair, 
 											TextPair, 
   											Text, 
   											Text> { 
 
 	@Override
-	protected void reduce(Text key, 
+	protected void reduce(TextPair key, 
 							Iterable<TextPair> values, 
-							Context context) throws IOException, InterruptedException {
+							Context context) throws IOException, InterruptedException {  
 		Iterator<TextPair> iter = values.iterator();
-		try{
-			
-			TextPair firstRecord = iter.next();
-			String type  = firstRecord.getFirst().toString();
-			String value  = firstRecord.getSecond().toString();
-			
-			while(iter.hasNext()){
-				context.write(iter.next().getSecond(), new Text(value));
+		List<String> ref = new ArrayList<String>();
+		List<String> log = new ArrayList<String>();
+		
+		TextPair value;
+		boolean isLog = false;
+		while (iter.hasNext()){
+			value = iter.next();
+			if (isLog == false && Integer.parseInt(value.getFirst().toString()) == 0){
+				ref.add(value.getSecond().toString());
+			}else{
+				isLog = true;
+				log.add(value.getSecond().toString());
 			}
-			
-		}catch(Exception ex){
-			System.out.println(ex.getMessage());
 		}
-  
+		
+		// For both one-to-one, one-to-many, many-to-many join 
+		for(int i = 0; i < ref.size(); i++)
+			for(int j = 0; j < log.size(); j++)
+				context.write(new Text(log.get(j)), new Text(ref.get(i)));
 	}
 }
 
