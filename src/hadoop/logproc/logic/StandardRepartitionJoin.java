@@ -90,9 +90,6 @@ public class StandardRepartitionJoin extends Configured implements Tool{
 	    job.setOutputKeyClass(Text.class);
 	    job.setOutputValueClass(Text.class);
 	    
-	    
-	    //job.setSortComparatorClass(ValueComparator.class);
-	    
 	    // Set map class and the map output key and value classes
 	    job.setMapOutputKeyClass(Text.class);
 	    job.setMapOutputValueClass(TextPair.class);
@@ -109,26 +106,6 @@ public class StandardRepartitionJoin extends Configured implements Tool{
 	public static void main(String args[]) throws Exception {
 	    int res = ToolRunner.run(new Configuration(), new StandardRepartitionJoin(args), args);
 	    System.exit(res);
-	}
-	
-	static class ValueComparator extends WritableComparator implements RawComparator {
-
-		protected ValueComparator(Class<TextPair> keyClass) {
-			super(TextPair.class, true);
-			// TODO Auto-generated constructor stub
-		} 
-		
-		@Override
-		public int compare(WritableComparable a, WritableComparable b) {
-			int type1 = Integer.parseInt(((TextPair) a).getFirst().toString());
-			int type2 = Integer.parseInt(((TextPair) b).getFirst().toString());
-			
-			if (type1 > type2)
-				return 1;
-			if (type1 == type2)
-				return 0;
-			return -1;
-		}
 	}
 }
 
@@ -187,7 +164,6 @@ class StandardRepartitionJoinReducer extends Reducer<Text,
 		for(int i = 0; i < ref.size(); i++)
 			for(int j = 0; j < log.size(); j++)
 				context.write(new Text(log.get(j)), new Text(ref.get(i)));
-  
 	}
 }
 
