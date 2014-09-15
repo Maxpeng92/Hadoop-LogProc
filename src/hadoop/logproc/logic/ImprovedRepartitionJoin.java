@@ -132,6 +132,12 @@ public class ImprovedRepartitionJoin extends Configured implements Tool{
 	}
 }
 
+/**
+ * 
+ * Partition (K: input key)
+ * hashcode <-- hash_func(K.join_key)
+ * return hashcode mod #reducers
+ */
 class ImprovedRepartitionJoinPartioner extends Partitioner<TextPair, TextPair>{
 	 @Override
 	    public int getPartition(TextPair key, TextPair value,
@@ -140,6 +146,13 @@ class ImprovedRepartitionJoinPartioner extends Partitioner<TextPair, TextPair>{
 	    }
 }
 
+/**
+ * 
+ * Map (K: null, V : a record from a split of either R or L) join key ← extract the join column from V
+ * tagged record ← add a tag of either R or L to V composite key ← (join key, tag)
+ * emit (composite key, tagged record)
+ *
+ */
 class ImprovedRepartitionJoinRefMapper extends Mapper<LongWritable, 
 								Text, 
 								TextPair, 
@@ -154,6 +167,14 @@ class ImprovedRepartitionJoinRefMapper extends Mapper<LongWritable,
 		context.write(new TextPair(new Text(values[0]), zero) , new TextPair(new Text("0"), new Text(values[1])));
 	}
 }
+
+/**
+ * 
+ * Map (K: null, V : a record from a split of either R or L) join key ← extract the join column from V
+ * tagged record ← add a tag of either R or L to V composite key ← (join key, tag)
+ * emit (composite key, tagged record)
+ *
+ */
 
 class ImprovedRepartitionJoinLogMapper extends Mapper<LongWritable, 
 														Text, 
@@ -178,27 +199,38 @@ class ImprovedRepartitionJoinReducer extends Reducer<TextPair,
 	@Override
 	protected void reduce(TextPair key, 
 							Iterable<TextPair> values, 
-							Context context) throws IOException, InterruptedException {  
+							Context context) throws IOException, InterruptedException {
+		
+		// Create a buffer BR for R
 		Iterator<TextPair> iter = values.iterator();
 		List<String> ref = new ArrayList<String>();
-		List<String> log = new ArrayList<String>();
 		
-		TextPair value;
-		boolean isLog = false;
+		TextPair value = new TextPair();
+		
+		/**
+		 * For each R record r in LIST V′ do
+		 * store r in BR
+		 */
 		while (iter.hasNext()){
 			value = iter.next();
-			if (isLog == false && Integer.parseInt(value.getFirst().toString()) == 0){
+			if (Integer.parseInt(value.getFirst().toString()) == 0){
 				ref.add(value.getSecond().toString());
 			}else{
-				isLog = true;
-				log.add(value.getSecond().toString());
+				for(int i = 0; i < ref.size(); i++)
+					context.write(value.getSecond(), new Text(ref.get(i)));
+				break;
 			}
 		}
 		
-		// For both one-to-one, one-to-many, many-to-many join 
-		for(int i = 0; i < ref.size(); i++)
-			for(int j = 0; j < log.size(); j++)
-				context.write(new Text(log.get(j)), new Text(ref.get(i)));
+		/**
+		 * for each L record l in LIST V′ do
+		 * for each record r in BR do print output
+		 */
+		while (iter.hasNext()){
+			value = iter.next();
+			for(int i = 0; i < ref.size(); i++)
+				context.write(value.getSecond(), new Text(ref.get(i)));
+		}
 	}
 }
 
