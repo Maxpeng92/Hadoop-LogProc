@@ -49,7 +49,7 @@ public class StandardRepartitionJoin extends Configured implements Tool{
 	public StandardRepartitionJoin(String[] args) {
 	    if (args.length != 4) {
 	      System.out.print(args.length);
-	      System.out.println("Usage: WordCount <num_reducers> <input_ref_path> <input_log_path> <output_path>");
+	      System.out.println("Usage: StandardRepartitionJoin <num_reducers> <input_ref_path> <input_log_path> <output_path>");
 	      System.exit(0);
 	    }
 	    

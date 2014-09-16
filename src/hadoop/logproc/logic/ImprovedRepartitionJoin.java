@@ -49,7 +49,7 @@ public class ImprovedRepartitionJoin extends Configured implements Tool{
 	public ImprovedRepartitionJoin(String[] args) {
 	    if (args.length != 4) {
 	      System.out.print(args.length);
-	      System.out.println("Usage: WordCount <num_reducers> <input_ref_path> <input_log_path> <output_path>");
+	      System.out.println("Usage: ImprovedRepartitionJoin <num_reducers> <input_ref_path> <input_log_path> <output_path>");
 	      System.exit(0);
 	    }
 	    

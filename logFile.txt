@@ -1,5 +1,9 @@
 1	1	Sang
-3	1	Khoa
-2	1	Kien
-3	1	An
-2	1	Trang
+3	2	Khoa
+2	3	Kien
+3	4	An
+2	5	Trang
+5	6	Tuong
+6	7	Duy
+7	8	Hung
+10	9	Nhat

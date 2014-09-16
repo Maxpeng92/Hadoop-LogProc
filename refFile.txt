@@ -1,3 +1,10 @@
 1	Mkt
 2	Eng
 3	Sales
+4	Economics
+5	Information Technology
+6	Math
+7	Biology
+8	Physics
+9	History
+10	Geography
