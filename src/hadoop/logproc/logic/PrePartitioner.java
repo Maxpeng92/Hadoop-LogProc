@@ -3,10 +3,12 @@ package hadoop.logproc.logic;
 import hadoop.logproc.data.TextPair;
 
 import java.io.BufferedInputStream;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.PrintWriter;
 import java.net.URI;
 import java.net.URL;
 import java.util.ArrayList;
@@ -48,7 +50,7 @@ import org.apache.hadoop.util.ToolRunner;
 
 /**
  * 
- * This file implements Directed Join from the paper "A Comparison of Join Algorithms for Log Processing in MapReduce"
+ * This file implements PreProcessing for Directed Join from the paper "A Comparison of Join Algorithms for Log Processing in MapReduce"
  * 
  * Author: NGUYEN Ngoc Chau Sang
  */
@@ -60,15 +62,19 @@ public class PrePartitioner extends Configured implements Tool{
 	}
 	
 	private int numReducers = 2;
-	static String hdfsHost = "hdfs://localhost:9000/"; 
+	
+	static String hdfsHost = "hdfs://localhost:9000/";
 	static Path refFile = new Path("refFile.txt");
 	static Path logFile = new Path("logFile.txt");
 	static Path outputDir = new Path("output");
+	static String inputType = "r";
+	static int interval = 5;
+	
+	private String localHost = "file:///Users/nncsang/Documents/workspace/Hadoop/LogProc/";
 	private int maxID = 10;
 	private Configuration conf;
 	private Job job;
-	static String inputType = "r";
-	static int interval = 5;
+	
 	
 	public PrePartitioner(String[] args) {
 	}
@@ -99,6 +105,7 @@ public class PrePartitioner extends Configured implements Tool{
 	    job.setReducerClass(PartitionerReducer.class);
 	    job.setOutputKeyClass(IntWritable.class);
 	    job.setOutputValueClass(Text.class);
+	    job.setGroupingComparatorClass(GroupComparator.class);
 	    
 	    // Set the number of reducers using variable numberReducers
 	    job.setNumReduceTasks(maxID/interval + 1);
@@ -112,26 +119,8 @@ public class PrePartitioner extends Configured implements Tool{
 	    
 	    // Set the jar class
 	    job.setJarByClass(PrePartitioner.class);
-	    
-//	    
-//	    InputStream in = null;
-//	    try {
-//	    	in = new URL(PrePartitioner.hdfsHost + "input/exclude.txt").openStream();
-//	    	IOUtils.copyBytes(in, System.out, 4096, false); 
-//	    } finally {
-//	    	IOUtils.closeStream(in); 
-//	    }
-	    
-//	    in = new BufferedInputStream(new FileInputStream("logFile.txt"));
-//	    
-//	    fs = FileSystem.get(URI.create(DirectedJoin.hdfsHost + "input/logFile.txt"), conf); 
-//	    OutputStream out = fs.create(new Path(DirectedJoin.hdfsHost + "input/logFile.txt"), new Progressable() {
-//	    	public void progress() {
-//	    	System.out.print("."); }
-//	    	});
-//	    IOUtils.copyBytes(in, out, 4096, true);
 	    	
-	    return 0;//job.waitForCompletion(true) ? 0 : 1; // this will execute the job
+	    return job.waitForCompletion(true) ? 0 : 1; 
 	}
 	
 	public static void main(String args[]) throws Exception {
@@ -162,16 +151,14 @@ class PartitionerReducer extends Reducer<IntWritable,
 		int partition = key.get() / interval;
 		
 		final Iterable<Text> vls = values;
-		FileSystem fs = FileSystem.get(context.getConfiguration());
-		FSDataOutputStream out = fs.create(new Path (PrePartitioner.outputDir + "/" +  PrePartitioner.inputType + "/"+ partition + ".txt"), new Progressable() {
-			@Override
-			public void progress() {
-				Iterator iter = vls.iterator();
-				while(iter.hasNext()){
-					System.out.println(iter.next().toString());
-				}
-			}
-		});
+		
+		File file = new File("parts/" +  PrePartitioner.inputType + "/"+ partition + ".txt");
+		PrintWriter writer = new PrintWriter(file, "UTF-8");
+		Iterator iter = values.iterator();
+		while(iter.hasNext()){
+			writer.println(iter.next().toString());
+		}
+		writer.close();
 	}
 }
 
@@ -187,6 +174,24 @@ class PartitionerMapper extends Mapper<LongWritable,
 		
 		String[] values = value.toString().split("\t");
 		context.write(new IntWritable(Integer.parseInt(values[0])) , value);
+	}
+}
+
+class GroupComparator extends WritableComparator { 
+	protected GroupComparator() {
+		super(IntWritable.class, true); 
+	}
+	
+	@Override
+	public int compare(WritableComparable a, WritableComparable b) {
+		int type1 = ((IntWritable) a).get() / PrePartitioner.interval;
+		int type2 = ((IntWritable) b).get() / PrePartitioner.interval;
+		
+		if (type1 > type2)
+			return 1;
+		if (type1 == type2)
+			return 0;
+		return -1;
 	}
 }
 
