@@ -67,6 +67,7 @@ public class DirectedJoin extends Configured implements Tool{
 	private String inputFile;
 	private String outputDir;
 	private int currentPart;
+	private String localHost = "file:///Users/nncsang/Documents/workspace/Hadoop/LogProc/";
 	
 	public DirectedJoin(String[] args) {
 		if (args.length != 3) {
@@ -118,6 +119,9 @@ public class DirectedJoin extends Configured implements Tool{
 	    	conf = this.getConf();
 	    	conf.set("partID", parts.get(i));
 	    	//conf.set("fs.defaultFS", "hdfs://localhost:9000/");
+	    	conf.addResource(new Path("/usr/local/Cellar/hadoop/2.5.0/libexec/etc/hadoop/core-site.xml"));
+	    	conf.addResource(new Path("/usr/local/Cellar/hadoop/2.5.0/libexec/etc/hadoop/hdfs-site.xml"));
+//	    	conf.addResource(new Path("/usr/local/Cellar/hadoop/2.5.0/libexec/etc/hadoop/mapred-site.xml"));
 	    	
 		    Job job = new Job(conf, "DirectedJoin");
 		    
@@ -134,11 +138,11 @@ public class DirectedJoin extends Configured implements Tool{
 		    job.setNumReduceTasks(0);
 		    
 		    // Add the input files
-		    FileInputFormat.addInputPath(job, new Path(parts.get(i)));
+		    FileInputFormat.addInputPath(job, new Path(localHost + parts.get(i)));
 		    
 		    // Set the output path
-		    deleteFile(conf, outputDir + "/" + parts.get(i).substring(1));
-		    FileOutputFormat.setOutputPath(job, new Path(outputDir + "/" + parts.get(i).substring(1)));
+		    deleteFile(conf, localHost + outputDir + "/" + parts.get(i).substring(1));
+		    FileOutputFormat.setOutputPath(job, new Path(localHost + outputDir + "/" + parts.get(i).substring(1)));
 		    
 		    // Set the jar class
 		    job.setJarByClass(DirectedJoin.class);
@@ -166,17 +170,23 @@ class DirectedJoinMapper extends Mapper<LongWritable,
 			throws IOException, InterruptedException {
 		
 		String refTablePath = "r" + context.getConfiguration().get("partID").substring(1);
-		File f = new File(refTablePath);
-		if(f.exists() && !f.isDirectory()) {
+		Configuration configuration = context.getConfiguration();
+		LocalFileSystem localFs = FileSystem.getLocal(configuration);
+		
+		if(localFs.exists(new Path(refTablePath))) {
+			//HRi ← build a hash table from Ri 
 			initRefTable(context, refTablePath);
 		}else{
+			/**
+			 * If Ri not exist in local storage then
+			 * remotely retrieve Ri and store locally
+			 */
 			FileSystem hdfsFileSystem = FileSystem.get(context.getConfiguration());
-			Path input = new Path("hdfs://localhost:9000/input/" + refTablePath);
-			Path local = new Path("/");
-			//hdfsFileSystem
+			Path input = new Path("/input1/" + refTablePath);
+			Path local = new Path("/Users/nncsang/Documents/workspace/Hadoop/LogProc/");
+			
 			if (hdfsFileSystem.exists(input)){
-				hdfsFileSystem.copyToLocalFile(false, input, local, true);
-				context.getConfiguration().set("fs.defaultFS", "localhost");
+				hdfsFileSystem.copyToLocalFile(input, local);
 				initRefTable(context, refTablePath);
 			}
 		}
@@ -203,7 +213,11 @@ class DirectedJoinMapper extends Mapper<LongWritable,
 	protected void map(LongWritable key, 
 						Text value, 
 						Context context) throws IOException, InterruptedException {
-		
+		/**
+		 * Map (K: null, V : a record from a split of Li)
+		 * probe HRi with the join column extracted from V for each match r from HRi do
+		 * ￼￼￼￼￼￼￼￼emit (null, new record(r, V ))
+		 */
 		String[] values = value.toString().split("\t");
 		String output = values[1] + "\t" + values[2] + "\t" + refTable.get(values[0]);
 		context.write(NullWritable.get(), new Text(output));
