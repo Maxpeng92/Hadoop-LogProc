@@ -1,0 +1,5 @@
+6	Math
+7	Biology
+8	Physics
+9	History
+10	Geography
