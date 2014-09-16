@@ -91,10 +91,13 @@ public class ImprovedRepartitionJoin extends Configured implements Tool{
 	    job.setOutputKeyClass(Text.class);
 	    job.setOutputValueClass(Text.class);
 	    job.setPartitionerClass(ImprovedRepartitionJoinPartioner.class);
+	    
+	    // Set sort and group by joinkey
 	    job.setSortComparatorClass(ValueComparator.class);
+	    job.setGroupingComparatorClass(GroupComparator.class);
 	    
 	    // Set map class and the map output key and value classes
-	    job.setMapOutputKeyClass(Text.class);
+	    job.setMapOutputKeyClass(TextPair.class);
 	    job.setMapOutputValueClass(TextPair.class);
 	    
 	    // Set the number of reducers using variable numberReducers
@@ -111,12 +114,39 @@ public class ImprovedRepartitionJoin extends Configured implements Tool{
 	    System.exit(res);
 	}
 	
-	static class ValueComparator extends WritableComparator implements RawComparator {
+	public static class ValueComparator extends WritableComparator{
 
-		protected ValueComparator(Class<TextPair> keyClass) {
-			super(TextPair.class);
-			// TODO Auto-generated constructor stub
+		protected ValueComparator() {
+			super(TextPair.class, true);
 		} 
+		
+		@Override
+		public int compare(WritableComparable a, WritableComparable b) {	
+			
+			int type1 = Integer.parseInt(((TextPair) a).getFirst().toString());
+			int type2 = Integer.parseInt(((TextPair) b).getFirst().toString());
+			
+			if (type1 > type2)
+				return 1;
+			if (type1 < type2)
+				return -1;
+			
+			type1 = Integer.parseInt(((TextPair) a).getSecond().toString());
+			type2 = Integer.parseInt(((TextPair) b).getSecond().toString());
+			
+			if (type1 > type2)
+				return 1;
+			if (type1 < type2)
+				return -1;
+			
+			return 0;
+		}
+	}
+	
+	public static class GroupComparator extends WritableComparator { 
+		protected GroupComparator() {
+			super(TextPair.class, true); 
+		}
 		
 		@Override
 		public int compare(WritableComparable a, WritableComparable b) {
@@ -164,7 +194,7 @@ class ImprovedRepartitionJoinRefMapper extends Mapper<LongWritable,
 						Context context) throws IOException, InterruptedException {
 		
 		String[] values = value.toString().split("\t");
-		context.write(new TextPair(new Text(values[0]), zero) , new TextPair(new Text("0"), new Text(values[1])));
+		context.write(new TextPair(new Text(values[0]), zero) , new TextPair(zero, new Text(values[1])));
 	}
 }
 
@@ -187,7 +217,7 @@ class ImprovedRepartitionJoinLogMapper extends Mapper<LongWritable,
 						Text value, 
 						Context context) throws IOException, InterruptedException {
 		String[] values = value.toString().split("\t");
-		context.write(new TextPair(new Text(values[0]), one), new TextPair(new Text("1"), new Text(values[1] + " - " + values[2])));
+		context.write(new TextPair(new Text(values[0]), one), new TextPair(one, new Text(values[1] + " - " + values[2])));
 	}
 }
 
@@ -223,7 +253,7 @@ class ImprovedRepartitionJoinReducer extends Reducer<TextPair,
 		}
 		
 		/**
-		 * for each L record l in LIST V′ do
+		 * For each L record l in LIST V′ do
 		 * for each record r in BR do print output
 		 */
 		while (iter.hasNext()){
