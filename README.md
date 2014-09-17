@@ -8,9 +8,11 @@ You can find the paper online at http://www.cs.ucr.edu/~tsotras/cs260/F12/LogPro
 
 Abbreviation
 =======
-L: log table <\br>
+L: log table
+
 R: reference talbe
 
 Standard Repartition Join
 =======
-It is also the join algorithm provided in the con- tributed join package of Hadoop (org.apache.hadoop.contrib. utils.join). L and R are dynamically partitioned on the join key and the corresponding pairs of partitions are joined. <\br>
+It is also the join algorithm provided in the con- tributed join package of Hadoop (org.apache.hadoop.contrib. utils.join). L and R are dynamically partitioned on the join key and the corresponding pairs of partitions are joined. 
+
