@@ -4,6 +4,7 @@ import hadoop.logproc.data.TextPair;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -43,19 +44,19 @@ import org.apache.hadoop.util.ToolRunner;
 
 /**
  * 
- * This file implements Semi Join from the paper "A Comparison of Join Algorithms for Log Processing in MapReduce"
+ * This file implements PerSplitSemiJoin from the paper "A Comparison of Join Algorithms for Log Processing in MapReduce"
  * 
  * Author: NGUYEN Ngoc Chau Sang
  */
 
-public class SemiJoin extends Configured implements Tool{
+public class PerSplitSemiJoin extends Configured implements Tool{
 	private int numReducers;
 	private Path refFile;
 	private Path logFile;
 	private Path outputDirPhase1;
 	private Path outputDirPhase2;
 	
-	public SemiJoin(String[] args) {
+	public PerSplitSemiJoin(String[] args) {
 	    if (args.length != 5) {
 	      System.out.print(args.length);
 	      System.out.println("Usage: StandardRepartitionJoin <num_reducers> <input_ref_path> <input_log_path> <output_phase_1_path> <output_phase_2_path>");
@@ -83,9 +84,9 @@ public class SemiJoin extends Configured implements Tool{
 	    }
 	    
 	    /**	Define new job
-	     * 	Phase 1: Extract unique join keys in L to a single file L.uk
+	     * 	Phase 1: Extract unique join keys for each L split to Li.uk
 	     */
-	    Job jobPhase1 = new Job(conf, "SemiJoinPhase1"); //define new job
+	    Job jobPhase1 = new Job(conf, "PerSliptSemiJoinPhase1"); //define new job
 	    
 	    // Set job output format
 	    jobPhase1.setOutputFormatClass(TextOutputFormat.class);
@@ -94,132 +95,106 @@ public class SemiJoin extends Configured implements Tool{
 	    FileInputFormat.addInputPath(jobPhase1, logFile);
 	    // Set the output path
 	    FileOutputFormat.setOutputPath(jobPhase1, outputDirPhase1);
-	    
-	    // Set reduce class and the reduce output key and value classes
-	    jobPhase1.setReducerClass(SemiJoinPhase1Reducer.class);
-	    jobPhase1.setOutputKeyClass(Text.class);
-	    jobPhase1.setOutputValueClass(Text.class);
+	
 	    
 	    // Set map class and the map output key and value classes
-	    jobPhase1.setMapperClass(SemiJoinPhase1Mapper.class);
+	    jobPhase1.setMapperClass(PerSplitSemiJoinPhase1Mapper.class);
 	    jobPhase1.setMapOutputKeyClass(Text.class);
 	    jobPhase1.setMapOutputValueClass(NullWritable.class);
 	    
 	    // Set the number of reducers using variable numberReducers
-	    jobPhase1.setNumReduceTasks(numReducers);
+	    jobPhase1.setNumReduceTasks(0);
 	    
 	    // Set the jar class
-	    jobPhase1.setJarByClass(SemiJoin.class);
+	    jobPhase1.setJarByClass(PerSplitSemiJoin.class);
 	   
 	    if (jobPhase1.waitForCompletion(true) == false){
 	    	return 0;
 	    }
-	    /**	Define new job
-	     * 	Phase 2: Use L.uk to filter referenced R records; generate a file Ri for each R split
-	     */
-	    Job jobPhase2 = new Job(conf, "SemiJoinPhase2"); //define new job
 	    
-	    /**	If file output is existed, delete it
-	     * 	Remove these line of codes from a real MapReduce application
+	    /**	Define new job
+	     * 	Phase 2: Use Li.uk to filter referenced R; generate a file RLi for each Li
 	     */
-	    if(fs.exists(outputDirPhase2)){
-	       fs.delete(outputDirPhase2, true);
-	    }
 	    
 	    // Set job output format
-	    jobPhase2.setOutputFormatClass(TextOutputFormat.class);
-	    
-	    // Add the input files 
-	    FileInputFormat.addInputPath(jobPhase2, refFile);
-	    
-	    // Set the output path
-	    FileOutputFormat.setOutputPath(jobPhase2, outputDirPhase2);
-	    
-	    // Set map class and the map output key and value classes
-	    jobPhase2.setMapperClass(SemiJoinPhase2Mapper.class);
-	    jobPhase2.setMapOutputKeyClass(NullWritable.class);
-	    jobPhase2.setMapOutputValueClass(Text.class);
+	    File folder = new File(outputDirPhase1.toString());
+	    File[] listOfFiles = folder.listFiles();
+
+	    for (File file : listOfFiles) {
+	        if (file.isFile()) {
+	            String fileName = file.getName();
+	            if (fileName == "_SUCCESS" || fileName.charAt(0) == '.' || fileName.charAt(0) == '_')
+	            	continue;
+	            Job jobPhase2 = new Job(conf, "PerSliptSemiJoinPhase2"); //define new job
+	            jobPhase2.setOutputFormatClass(TextOutputFormat.class);
+	            
+	            // Add the input files 
+	    	    FileInputFormat.addInputPath(jobPhase2, refFile);
+	    	    
+	    	    if(fs.exists(new Path(outputDirPhase2.toString() + "//" + fileName))){
+	 		       fs.delete(new Path(outputDirPhase2.toString() + "//" + fileName), true);
+	 		    }
+	    	    // Set the output path
+	    	    FileOutputFormat.setOutputPath(jobPhase2, new Path(outputDirPhase2.toString() + "//" + fileName));
+	    	    
+	    	    // Set map class and the map output key and value classes
+	    	    jobPhase2.setMapperClass(PerSplitSemiJoinPhase2Mapper.class);
+	    	    jobPhase2.setMapOutputKeyClass(NullWritable.class);
+	    	    jobPhase2.setMapOutputValueClass(Text.class);
+	    	    
+	    	    /**
+	    	     *  Init ()
+	    	     *  ref keys ← load L.uk from phase 1 to a hash tables
+	    	     */
+	    	    PerSplitSemiJoinPhase2Mapper.init(outputDirPhase1 + "//" +fileName);
+	    	    // Set the number of reducers using variable numberReducers
+	    	    jobPhase2.setNumReduceTasks(numReducers);
+	    	    
+	    	    // Set the jar class
+	    	    jobPhase2.setJarByClass(PerSplitSemiJoin.class);
+	    	    if (jobPhase2.waitForCompletion(true) == false)
+	    	    	return 0;
+	        }
+	    }
+	   
 	    
 	    /**
-	     *  Init ()
-	     *  ref keys ← load L.uk from phase 1 to a hash tables
+	     * Phase 3: Directed join between each RLi and Li pair
+	     * which is implemented in DirectedJoin.java
 	     */
-	    SemiJoinPhase2Mapper.init("semi_join_phase1_uniquekeys.txt");
-	    
-	    // Set the number of reducers using variable numberReducers
-	    jobPhase2.setNumReduceTasks(numReducers);
-	    
-	    // Set the jar class
-	    jobPhase2.setJarByClass(SemiJoin.class);
-	    
-	    /**
-	     * Phase 3: Broadcast all Ri to each L split for the final join
-	     * which is implemented in BroadcaseJoin.java
-	     */
-	    return jobPhase2.waitForCompletion(true) ? 0 : 1; // this will execute the job
+	    return 0; // this will execute the job
 	}
 	
 	public static void main(String args[]) throws Exception {
-	    int res = ToolRunner.run(new Configuration(), new SemiJoin(args), args);
+	    int res = ToolRunner.run(new Configuration(), new PerSplitSemiJoin(args), args);
 	    System.exit(res);
 	}
 }
 
-class SemiJoinPhase1Mapper extends Mapper<LongWritable, 
+class PerSplitSemiJoinPhase1Mapper extends Mapper<LongWritable, 
 								Text, 
 								Text, 
-								NullWritable> { 
+								NullWritable> {
+	Set<String> hashTable = new HashSet<String>();
 	@Override
 	protected void map(LongWritable key, 
 						Text value, 
 						Context context) throws IOException, InterruptedException {
 		String[] values = value.toString().split("\t");
-		context.write(new Text(values[0]), NullWritable.get());
-	}
-}
-
-class SemiJoinPhase1Reducer extends Reducer<Text, 
-											NullWritable, 
-											NullWritable, 
-											NullWritable> { 
-	private int sizePerFlush = 5;
-	private List<String> uniqueKeys = new ArrayList<String>();
-	@Override
-	protected void reduce(Text key, 
-							Iterable<NullWritable> values, 
-							Context context) throws IOException, InterruptedException {
-		uniqueKeys.add(key.toString());
-		if (uniqueKeys.size() > sizePerFlush){
-			PrintWriter out = new PrintWriter(new BufferedWriter(new FileWriter("semi_join_phase1_uniquekeys.txt", true)));
-			for(String uniquekey: uniqueKeys){
-				out.println(uniquekey);
-			}
-			out.close();
-			uniqueKeys.clear();
-		}
-	}
-	
-	@Override
-	protected void cleanup(Context context)
-			throws IOException, InterruptedException {
-		// TODO Auto-generated method stub
-		if (uniqueKeys.size() > 0){
-			PrintWriter out = new PrintWriter(new BufferedWriter(new FileWriter("semi_join_phase1_uniquekeys.txt", true)));
-			for(String uniquekey: uniqueKeys){
-				out.println(uniquekey);
-			}
-			out.close();
-			uniqueKeys.clear();
+		if (hashTable.contains(values[0]) == false){
+			hashTable.add(values[0]);
+			context.write(new Text(values[0]), NullWritable.get());
 		}
 	}
 }
 
-class SemiJoinPhase2Mapper extends Mapper<LongWritable, 
+class PerSplitSemiJoinPhase2Mapper extends Mapper<LongWritable, 
 											Text, 
 											NullWritable, 
 											Text> {
 	static Set<String> hashTable = new HashSet<String>();
 	static public void init(String uniqueKeysPath){
+		hashTable.clear();
 		try{
 			BufferedReader br = new BufferedReader(new FileReader(uniqueKeysPath));
 		    String line;
