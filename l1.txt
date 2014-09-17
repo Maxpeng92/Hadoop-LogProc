@@ -1,3 +1,2 @@
 6	7	Duy
 7	8	Hung
-10	9	Nhat
