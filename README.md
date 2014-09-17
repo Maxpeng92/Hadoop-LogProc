@@ -87,4 +87,28 @@ Usually, R is much smaller than L. To avoid overhead due to storing and sending 
 
 The puporse of **init phase** is to hope that not all partitions of R have to be loaded in memory during the join. Besides that, to optimize the memory the smaller of R and the split of L is chosen to buil the hash table. 
 
-Note that across map tasks, the partitions of R may be reloaded several times, since each map task runs as a sep- arate process.
+Note that across map tasks, the partitions of R may be reloaded several times, since each map task runs as a separate process.
+
+Semi Join
+=======
+This approach for the situation that R is large but many records in R may not be actually referenced by any records in table L. If we use **broadcast join**, there will be a large portion of the records in R that are shipped across the network (via the DFS) and loaded in the hash table are not used by the join. For a summary, we use semi Join to avoid sending the records in R over the network that will not join with L.
+
+	Phase 1: Extract unique join keys in L to a single file L.uk (which is)
+
+	Phase 2: Use L.uk to filter referenced R records; generate a file Ri for each R split
+
+	Phase 3: Broadcast all Ri to each L split for the final join
+
+Although semi-join avoids sending the records in R over the network that will not join with L, it does this at the cost of an extra scan of L.
+
+Per-Split Semi-Join
+=======
+One problem with semi-join is that not every record in the filtered version of R will join with a particular split Li of L. The per-split semi-join is designed to address this problem.
+
+	Phase 1: Extract unique join keys for each L split to Li.uk
+
+	Phase 2: Use Li.uk to filter referenced R; generate a file RLi for each Li
+
+	Phase 3: Directed join between each RLi and Li pair
+
+Compared to the basic semi-join, the per-split semi-join makes the third phase even cheaper since it moves just the records in R that will join with each split of L. However, its first two phases are more involved.
