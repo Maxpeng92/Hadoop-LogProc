@@ -220,5 +220,3 @@ class DirectedJoinMapper extends Mapper<LongWritable,
 		context.write(NullWritable.get(), new Text(output));
 	}
 }
-
-

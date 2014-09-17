@@ -263,6 +263,3 @@ class ImprovedRepartitionJoinReducer extends Reducer<TextPair,
 		}
 	}
 }
-
-
-

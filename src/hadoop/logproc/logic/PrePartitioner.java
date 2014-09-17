@@ -194,5 +194,3 @@ class GroupComparator extends WritableComparator {
 		return -1;
 	}
 }
-
-

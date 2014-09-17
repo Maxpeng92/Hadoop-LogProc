@@ -185,6 +185,3 @@ class StandardRepartitionJoinReducer extends Reducer<Text,
 				context.write(new Text(log.get(j)), new Text(ref.get(i)));
 	}
 }
-
-
-
