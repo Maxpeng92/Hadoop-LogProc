@@ -6,7 +6,7 @@ In this project, I implemented different join algorithms from:
 
 You can find the paper online at http://www.cs.ucr.edu/~tsotras/cs260/F12/LogProc.pdf, or in [material](/material) directory of this project.
 
-**Abbreviation**: **L** is log table and **R** is reference table
+**Abbreviation**: L is log table and R is reference table
 
 Standard Repartition Join
 =======
@@ -23,7 +23,7 @@ It is also the join algorithm provided in the con- tributed join package of Hado
 		- Performs a cross-product between records in set of Br and Bl.
 		- Output: (null, r*l) which r*l is joined record
 
-**Potential problem:** When the key cardinality is small or when the data is highly skewed, all the records for a given join key may not fit in memory (Br + Bl, mostly Bl).
+**Potential problem:** When the key cardinality is small or when the data is highly skewed, all the records for a given join key may not fit in memory (Br + Bl, mostly Bl), R and L are moved across the network.
 
 Improved Repartition Join
 =======
@@ -52,7 +52,7 @@ To fix the buffering problem of the standard repartition join which is Bl too la
 		- Performs a cross-product between records in set of R and L.
 		- Output: (null, r*l) with r*l is joined record
 
-**Potential problem:** Both versions (Standard Repartition Join and Improved Repartition Join) include two major sources of overhead that can hurt performance. In particular, both L and R have to be sorted and sent over the network during the shuffle phase of MapReduce
+**Potential problem:** Both versions (Standard Repartition Join and Improved Repartition Join) include two major sources of overhead that can hurt performance. In particular, both L and R have to be sorted and sent over the network during the shuffle phase of MapReduce.
 
 Directed Join
 =======
@@ -62,7 +62,29 @@ The shuffle over- head in the repartition join can be decreased if both L and R 
 		- If Ri not exist in local storage then remotely retrieve Ri and store locally HRi ← build a hash table from Ri
 
 	Map phase: 
-		- Input: (K: null, V : a record from a split of Li)
+		- Input: (K: null, V: a record from a split of Li)
 		- Output: join V with HRi by join key of V and join key of HRi
 
-We can see directed join only store a hash table of Ri (part of R) which is small, so it is avoid run out of my in the case of R is big or L table is skewed. The disadvantage of this approach is that R and L must be pre-partitioning.
+We can see directed join only store a hash table of Ri (part of R) which is small, so it is avoid run out of my in the case of R is big or L table is skewed. The disadvantage of this approach are that R and L must be pre-partitioning.
+
+Broadcast Join
+=======
+Usually, R is much smaller than L. To avoid overhead due to storing and sending both tables, we can simply **broadcast** only R.
+	
+	Init phase:
+		- if R not exist in local storage then
+			remotely retrieve R
+			partition R into p chunks R1..Rp save R1..Rp to local storage
+
+		if R < a split of L then
+			HR ← build a hash table from R1..Rp
+		else
+			HL1 ..HLp ← initialize p hash tables for L
+
+	Map phase: 
+		- Input: (K: null, V : a record from an L split)
+		- Output: join V with HR or HLi (if HR is null)
+
+The puporse of **init phase** is to hope that not all partitions of R have to be loaded in memory during the join. Besides that, to optimize the memory the smaller of R and the split of L is chosen to buil the hash table. 
+
+Note that across map tasks, the partitions of R may be reloaded several times, since each map task runs as a sep- arate process.
