@@ -6,11 +6,7 @@ In this project, I implemented different join algorithms from:
 
 You can find the paper online at http://www.cs.ucr.edu/~tsotras/cs260/F12/LogProc.pdf, or in [material](/material) directory of this project.
 
-Abbreviation
-=======
-L: log table
-
-R: reference talbe
+**Abbreviation**: L is log table and R is reference table
 
 Standard Repartition Join
 =======
@@ -57,3 +53,16 @@ To fix the buffering problem of the standard repartition join which is Bl too la
 		- Output: (null, r*l) with r*l is joined record
 
 Potential problem: Both versions (Standard Repartition Join and Improved Repartition Join) include two major sources of overhead that can hurt performance. In particular, both L and R have to be sorted and sent over the network during the shuffle phase of MapReduce
+
+Directed Join
+=======
+The shuffle over- head in the repartition join can be decreased if both L and R have already been partitioned on the join key before the join operation. This can be accomplished by pre-partitioning L on the join key as log records are generated and by pre- partitioning R on the join key when it is loaded into the DFS. Then at query time, matching partitions from L and R can be directly joined
+	
+	Inits:
+		- If Ri not exist in local storage then remotely retrieve Ri and store locally HRi ← build a hash table from Ri
+
+	Map phase: 
+		- Input: (K: null, V : a record from a split of Li)
+		- Output: join V with HRi by join key of V and join key of HRi
+
+We can see directed join only store a hash table of Ri (part of R) which is small, so it is avoid run out of my in the case of R is big or L table is skewed. The disadvantage of this approach is that R and L must be pre-partitioning.
