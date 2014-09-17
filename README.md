@@ -2,11 +2,11 @@ LogProc
 =======
 In this project, I implemented different join algorithms from: 
 
-"A Comparison of Join Algorithms for Log Processing in MapReduce" of Spyros Blanas, Jignesh M. Patel, Vuk Ercegovac, Jun Rao, Eugene J. Shekita and Yuanyuan Tian
+**"A Comparison of Join Algorithms for Log Processing in MapReduce"** of *Spyros Blanas, Jignesh M. Patel, Vuk Ercegovac, Jun Rao, Eugene J. Shekita and Yuanyuan Tian*
 
 You can find the paper online at http://www.cs.ucr.edu/~tsotras/cs260/F12/LogProc.pdf, or in [material](/material) directory of this project.
 
-**Abbreviation**: L is log table and R is reference table
+**Abbreviation**: **L** is log table and **R** is reference table
 
 Standard Repartition Join
 =======
@@ -23,7 +23,7 @@ It is also the join algorithm provided in the con- tributed join package of Hado
 		- Performs a cross-product between records in set of Br and Bl.
 		- Output: (null, r*l) which r*l is joined record
 
-Potential problem: When the key cardinality is small or when the data is highly skewed, all the records for a given join key may not fit in memory (Br + Bl, mostly Bl).
+**Potential problem:** When the key cardinality is small or when the data is highly skewed, all the records for a given join key may not fit in memory (Br + Bl, mostly Bl).
 
 Improved Repartition Join
 =======
@@ -52,7 +52,7 @@ To fix the buffering problem of the standard repartition join which is Bl too la
 		- Performs a cross-product between records in set of R and L.
 		- Output: (null, r*l) with r*l is joined record
 
-Potential problem: Both versions (Standard Repartition Join and Improved Repartition Join) include two major sources of overhead that can hurt performance. In particular, both L and R have to be sorted and sent over the network during the shuffle phase of MapReduce
+**Potential problem:** Both versions (Standard Repartition Join and Improved Repartition Join) include two major sources of overhead that can hurt performance. In particular, both L and R have to be sorted and sent over the network during the shuffle phase of MapReduce
 
 Directed Join
 =======
