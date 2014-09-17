@@ -118,15 +118,12 @@ public class DirectedJoin extends Configured implements Tool{
 		    // Define new job
 	    	conf = this.getConf();
 	    	conf.set("partID", parts.get(i));
-	    	//conf.set("fs.defaultFS", "hdfs://localhost:9000/");
 	    	conf.addResource(new Path("/usr/local/Cellar/hadoop/2.5.0/libexec/etc/hadoop/core-site.xml"));
 	    	conf.addResource(new Path("/usr/local/Cellar/hadoop/2.5.0/libexec/etc/hadoop/hdfs-site.xml"));
-//	    	conf.addResource(new Path("/usr/local/Cellar/hadoop/2.5.0/libexec/etc/hadoop/mapred-site.xml"));
 	    	
 		    Job job = new Job(conf, "DirectedJoin");
 		    
 		    // Set map class and the map output key and value classes
-		    
 		    job.setMapperClass(DirectedJoinMapper.class);
 		    job.setMapOutputKeyClass(NullWritable.class);
 		    job.setMapOutputValueClass(Text.class);

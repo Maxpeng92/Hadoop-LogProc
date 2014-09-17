@@ -60,7 +60,7 @@ import org.apache.hadoop.util.ToolRunner;
 
 /**
  * 
- * This file implements Directed Join from the paper "A Comparison of Join Algorithms for Log Processing in MapReduce"
+ * This file implements Broadcast Join from the paper "A Comparison of Join Algorithms for Log Processing in MapReduce"
  * 
  * Author: NGUYEN Ngoc Chau Sang
  */
