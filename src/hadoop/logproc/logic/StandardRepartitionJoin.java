@@ -101,7 +101,7 @@ public class StandardRepartitionJoin extends Configured implements Tool{
 	    
 	    // Set the jar class
 	    job.setJarByClass(StandardRepartitionJoin.class);
-	   
+	    
 	    return job.waitForCompletion(true) ? 0 : 1; // this will execute the job
 	}
 	

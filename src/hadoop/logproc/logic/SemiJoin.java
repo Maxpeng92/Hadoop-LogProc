@@ -2,13 +2,17 @@ package hadoop.logproc.logic;
 
 import hadoop.logproc.data.TextPair;
 
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 import java.util.StringTokenizer;
 
 import org.apache.hadoop.conf.Configuration;
@@ -48,12 +52,13 @@ public class SemiJoin extends Configured implements Tool{
 	private int numReducers;
 	private Path refFile;
 	private Path logFile;
-	private Path outputDir;
+	private Path outputDirPhase1;
+	private Path outputDirPhase2;
 	
 	public SemiJoin(String[] args) {
-	    if (args.length != 4) {
+	    if (args.length != 5) {
 	      System.out.print(args.length);
-	      System.out.println("Usage: StandardRepartitionJoin <num_reducers> <input_ref_path> <input_log_path> <output_path>");
+	      System.out.println("Usage: StandardRepartitionJoin <num_reducers> <input_ref_path> <input_log_path> <output_phase_1_path> <output_phase_2_path>");
 	      System.exit(0);
 	    }
 	    
@@ -61,7 +66,8 @@ public class SemiJoin extends Configured implements Tool{
 	    this.numReducers = Integer.parseInt(args[0]);
 	    this.refFile = new Path(args[1]);
 	    this.logFile = new Path(args[2]);
-	    this.outputDir = new Path(args[3]);
+	    this.outputDirPhase1 = new Path(args[3]);
+	    this.outputDirPhase2 = new Path(args[4]);
 	}
 	  
 	@Override
@@ -72,8 +78,8 @@ public class SemiJoin extends Configured implements Tool{
 	     * 	Remove these line of codes from a real MapReduce application
 	     */
 	    FileSystem fs = FileSystem.get(conf);
-	    if(fs.exists(outputDir)){
-	       fs.delete(outputDir, true);
+	    if(fs.exists(outputDirPhase1)){
+	       fs.delete(outputDirPhase1, true);
 	    }
 	    
 	    /**	Define new job
@@ -87,7 +93,7 @@ public class SemiJoin extends Configured implements Tool{
 	    // Add the input files 
 	    FileInputFormat.addInputPath(jobPhase1, logFile);
 	    // Set the output path
-	    FileOutputFormat.setOutputPath(jobPhase1, outputDir);
+	    FileOutputFormat.setOutputPath(jobPhase1, outputDirPhase1);
 	    
 	    // Set reduce class and the reduce output key and value classes
 	    jobPhase1.setReducerClass(SemiJoinPhase1Reducer.class);
@@ -105,7 +111,52 @@ public class SemiJoin extends Configured implements Tool{
 	    // Set the jar class
 	    jobPhase1.setJarByClass(SemiJoin.class);
 	   
-	    return jobPhase1.waitForCompletion(true) ? 0 : 1; // this will execute the job
+	    if (jobPhase1.waitForCompletion(true) == false){
+	    	return 0;
+	    }
+	    /**	Define new job
+	     * 	Phase 2: Use L.uk to filter referenced R records; generate a file Ri for each R split
+	     */
+	    Job jobPhase2 = new Job(conf, "SemiJoinPhase2"); //define new job
+	    
+	    /**	If file output is existed, delete it
+	     * 	Remove these line of codes from a real MapReduce application
+	     */
+	    if(fs.exists(outputDirPhase2)){
+	       fs.delete(outputDirPhase2, true);
+	    }
+	    
+	    // Set job output format
+	    jobPhase2.setOutputFormatClass(TextOutputFormat.class);
+	    
+	    // Add the input files 
+	    FileInputFormat.addInputPath(jobPhase2, refFile);
+	    
+	    // Set the output path
+	    FileOutputFormat.setOutputPath(jobPhase2, outputDirPhase2);
+	    
+	    // Set map class and the map output key and value classes
+	    jobPhase2.setMapperClass(SemiJoinPhase2Mapper.class);
+	    jobPhase2.setMapOutputKeyClass(NullWritable.class);
+	    jobPhase2.setMapOutputValueClass(Text.class);
+	    
+	    /**
+	     *  Init ()
+	     *  ref keys ← load L.uk from phase 1 to a hash tables
+	     */
+	    SemiJoinPhase2Mapper.init("semi_join_phase1_uniquekeys.txt");
+	    
+	    // Set the number of reducers using variable numberReducers
+	    jobPhase2.setNumReduceTasks(numReducers);
+	    
+	    // Set the jar class
+	    jobPhase2.setJarByClass(SemiJoin.class);
+	    
+	    /**
+	     * Phase 3: Broadcast all Ri to each L split for the final join
+	     * which is implemented in BroadcaseJoin.java
+	     */
+	    return jobPhase2.waitForCompletion(true) ? 0 : 1; // this will execute the job
 	}
 	
 	public static void main(String args[]) throws Exception {
@@ -149,7 +200,7 @@ class SemiJoinPhase1Reducer extends Reducer<Text,
 	}
 	
 	@Override
-	protected void cleanup(org.apache.hadoop.mapreduce.Reducer.Context context)
+	protected void cleanup(Context context)
 			throws IOException, InterruptedException {
 		// TODO Auto-generated method stub
 		if (uniqueKeys.size() > 0){
@@ -160,5 +211,36 @@ class SemiJoinPhase1Reducer extends Reducer<Text,
 			out.close();
 			uniqueKeys.clear();
 		}
+	}
+}
+
+class SemiJoinPhase2Mapper extends Mapper<LongWritable, 
+											Text, 
+											NullWritable, 
+											Text> {
+	static Set<String> hashTable = new HashSet<String>();
+	static public void init(String uniqueKeysPath){
+		try{
+			BufferedReader br = new BufferedReader(new FileReader(uniqueKeysPath));
+		    String line;
+		    while ((line = br.readLine()) != null) {
+		    	hashTable.add(line);
+		    }
+	    }catch(Exception ex){
+	    	System.out.println(ex.getMessage());
+	    }
+	}
+	
+	@Override
+	protected void map(LongWritable key, 
+						Text value, 
+						Context context) throws IOException, InterruptedException {
+		String[] values = value.toString().split("\t");
+		/**
+		 * join col ← extract join column from V if join col in ref keys then
+		 * emit (null, V )
+		 */
+		if (hashTable.contains(values[0]))
+			context.write(NullWritable.get(), value);
 	}
 }
