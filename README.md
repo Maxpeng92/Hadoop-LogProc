@@ -56,7 +56,7 @@ To fix the buffering problem of the standard repartition join which is Bl too la
 
 Directed Join
 =======
-The shuffle over- head in the repartition join can be decreased if both L and R have already been partitioned on the join key before the join operation. This can be accomplished by pre-partitioning L on the join key as log records are generated and by pre- partitioning R on the join key when it is loaded into the DFS. Then at query time, matching partitions from L and R can be directly joined
+The shuffle overhead in the repartition join can be decreased if both L and R have already been partitioned on the join key before the join operation. This can be accomplished by pre-partitioning L on the join key as log records are generated and by pre- partitioning R on the join key when it is loaded into the DFS. Then at query time, matching partitions from L and R can be directly joined
 	
 	Inits:
 		- If Ri not exist in local storage then remotely retrieve Ri and store locally HRi ← build a hash table from Ri
@@ -65,7 +65,7 @@ The shuffle over- head in the repartition join can be decreased if both L and R 
 		- Input: (K: null, V: a record from a split of Li)
 		- Output: join V with HRi by join key of V and join key of HRi
 
-We can see directed join only store a hash table of Ri (part of R) which is small, so it is avoid run out of my in the case of R is big or L table is skewed. The disadvantage of this approach are that R and L must be pre-partitioning.
+We can see directed join only store a hash table of Ri (part of R) which is small, so it is avoid run out of memory in the case of R is big or L table is skewed. The disadvantage of this approach are that R and L must be pre-partitioning.
 
 Broadcast Join
 =======
@@ -85,7 +85,7 @@ Usually, R is much smaller than L. To avoid overhead due to storing and sending 
 		- Input: (K: null, V : a record from an L split)
 		- Output: join V with HR or HLi (if HR is null)
 
-The puporse of **init phase** is to hope that not all partitions of R have to be loaded in memory during the join. Besides that, to optimize the memory the smaller of R and the split of L is chosen to buil the hash table. 
+The puporse of **init phase** is to hope that not all partitions of R have to be loaded in memory during the join. Besides that, to optimize the memory, the smaller of R and the split of L is chosen to buil the hash table. 
 
 Note that across map tasks, the partitions of R may be reloaded several times, since each map task runs as a separate process.
 
