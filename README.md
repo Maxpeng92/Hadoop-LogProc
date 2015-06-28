@@ -1,6 +1,6 @@
 LogProc
 =======
-In this project, I implemented different join algorithms from: 
+In this project, I implemented different distributed join algorithms which are described in: 
 
 **"A Comparison of Join Algorithms for Log Processing in MapReduce"** of *Spyros Blanas, Jignesh M. Patel, Vuk Ercegovac, Jun Rao, Eugene J. Shekita and Yuanyuan Tian*
 
