@@ -10,7 +10,7 @@ You can find the paper online at http://www.cs.ucr.edu/~tsotras/cs260/F12/LogPro
 
 Standard Repartition Join
 =======
-It is also the join algorithm provided in the con- tributed join package of Hadoop **(org.apache.hadoop.contrib. utils.join)**. L and R are dynamically partitioned on the join key and the corresponding pairs of partitions are joined. 
+It is also the join algorithm provided in the contributed join package of Hadoop **(org.apache.hadoop.contrib. utils.join)**. L and R are dynamically partitioned on the join key and the corresponding pairs of partitions are joined. 
 
 	Map phase: 
 		- Each map task works on a split of either R or L, uses tagging to identify with is original table
@@ -34,7 +34,7 @@ To fix the buffering problem of the standard repartition join which is Bl too la
 		- Input: (K: null, V : a record from a split of either R or L)
 		- Output: (composite_key, tagged record) with composite_key = (join key, tag)
 
-	Partiion phase: 
+	Partition phase: 
 		- Input: composite_key K
 		- Output: partition of K which is hashcode(K.join_key) % num of reducers
 
@@ -56,16 +56,16 @@ To fix the buffering problem of the standard repartition join which is Bl too la
 
 Directed Join
 =======
-The shuffle overhead in the repartition join can be decreased if both L and R have already been partitioned on the join key before the join operation. This can be accomplished by pre-partitioning L on the join key as log records are generated and by pre- partitioning R on the join key when it is loaded into the DFS. Then at query time, matching partitions from L and R can be directly joined
+The shuffle overhead in the repartition join can be decreased if both L and R have already been partitioned on the join key before the join operation. This can be accomplished by pre-partitioning L on the join key as log records are generated and by pre-partitioning R on the join key when it is loaded into the DFS. Then at query time, matching partitions from L and R can be directly joined
 	
 	Inits:
-		- If Ri not exist in local storage then remotely retrieve Ri and store locally HRi ← build a hash table from Ri
+		- If Ri not exists in local storage then remotely retrieve Ri and store locally HRi ← build a hash table from Ri
 
 	Map phase: 
 		- Input: (K: null, V: a record from a split of Li)
 		- Output: join V with HRi by join key of V and join key of HRi
 
-We can see directed join only store a hash table of Ri (part of R) which is small, so it is avoid run out of memory in the case of R is big or L table is skewed. The disadvantage of this approach are that R and L must be pre-partitioning.
+We can see directed join only store a hash table of Ri (part of R), which is small, so it is avoid run out of memory in the case of R is big or L table is skewed. The disadvantage of this approach is that R and L must be pre-partitioning.
 
 Broadcast Join
 =======
@@ -85,7 +85,7 @@ Usually, R is much smaller than L. To avoid overhead due to storing and sending 
 		- Input: (K: null, V : a record from an L split)
 		- Output: join V with HR or HLi (if HR is null)
 
-The puporse of **init phase** is to hope that not all partitions of R have to be loaded in memory during the join. Besides that, to optimize the memory, the smaller of R and the split of L is chosen to buil the hash table. 
+The purpose of **init phase** is to hope that not all partitions of R have to be loaded in memory during the join. Besides that, to optimize the memory, the smaller of R and the split of L is chosen to build the hash table. 
 
 Note that across map tasks, the partitions of R may be reloaded several times, since each map task runs as a separate process.
 
@@ -112,3 +112,4 @@ One problem with semi-join is that not every record in the filtered version of R
 	Phase 3: Directed join between each RLi and Li pair
 
 Compared to the basic semi-join, the per-split semi-join makes the third phase even cheaper since it moves just the records in R that will join with each split of L. However, its first two phases are more involved.
+
