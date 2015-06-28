@@ -6,7 +6,7 @@ In this project, I implemented different distributed join algorithms which are d
 
 You can find the paper online at http://www.cs.ucr.edu/~tsotras/cs260/F12/LogProc.pdf, or in [material](/material) directory of this project.
 
-**Abbreviation**: L is log table and R is reference table
+**Abbreviations**: L is log table and R is reference table
 
 Standard Repartition Join
 =======
