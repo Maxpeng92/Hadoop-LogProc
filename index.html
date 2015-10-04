@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="UTF-8">
+    <title>Hadoop-logproc by nncsang</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" type="text/css" href="stylesheets/normalize.css" media="screen">
+    <link href='https://fonts.googleapis.com/css?family=Open+Sans:400,700' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen">
+    <link rel="stylesheet" type="text/css" href="stylesheets/github-light.css" media="screen">
+  </head>
+  <body>
+    <section class="page-header">
+      <h1 class="project-name">Hadoop-logproc</h1>
+      <h2 class="project-tagline"></h2>
+      <a href="https://github.com/nncsang/Hadoop-LogProc" class="btn">View on GitHub</a>
+      <a href="https://github.com/nncsang/Hadoop-LogProc/zipball/master" class="btn">Download .zip</a>
+      <a href="https://github.com/nncsang/Hadoop-LogProc/tarball/master" class="btn">Download .tar.gz</a>
+    </section>
+
+    <section class="main-content">
+      <h1>
+<a id="logproc" class="anchor" href="#logproc" aria-hidden="true"><span class="octicon octicon-link"></span></a>LogProc</h1>
+
+<p>In this project, I implemented different distributed join algorithms which are described in: </p>
+
+<p><strong>"A Comparison of Join Algorithms for Log Processing in MapReduce"</strong> of <em>Spyros Blanas, Jignesh M. Patel, Vuk Ercegovac, Jun Rao, Eugene J. Shekita and Yuanyuan Tian</em></p>
+
+<p>You can find the paper online at <a href="http://www.cs.ucr.edu/%7Etsotras/cs260/F12/LogProc.pdf">http://www.cs.ucr.edu/~tsotras/cs260/F12/LogProc.pdf</a>, or in <a href="/material">material</a> directory of this project.</p>
+
+<p><strong>Abbreviations</strong>: L is log table and R is reference table</p>
+
+<h1>
+<a id="standard-repartition-join" class="anchor" href="#standard-repartition-join" aria-hidden="true"><span class="octicon octicon-link"></span></a>Standard Repartition Join</h1>
+
+<p>It is also the join algorithm provided in the contributed join package of Hadoop <strong>(org.apache.hadoop.contrib. utils.join)</strong>. L and R are dynamically partitioned on the join key and the corresponding pairs of partitions are joined. </p>
+
+<pre><code>Map phase: 
+    - Each map task works on a split of either R or L, uses tagging to identify with is original table
+    - Input: (K: null, V : a record from a split of either R or L)
+    - Output: (join key, tagged record)
+
+Reduce phase:
+    - Input: (K': join key, LIST V': records from R and L with join key K')
+    - Buffer records from R (Br) and buffer records from L (Bl)
+    - Performs a cross-product between records in set of Br and Bl.
+    - Output: (null, r*l) which r*l is joined record
+</code></pre>
+
+<p><strong>Potential problem:</strong> When the key cardinality is small or when the data is highly skewed, all the records for a given join key may not fit in memory (Br + Bl, mostly Bl), R and L are moved across the network.</p>
+
+<h1>
+<a id="improved-repartition-join" class="anchor" href="#improved-repartition-join" aria-hidden="true"><span class="octicon octicon-link"></span></a>Improved Repartition Join</h1>
+
+<p>To fix the buffering problem of the standard repartition join which is Bl too large.</p>
+
+<pre><code>Map phase: 
+    - Each map task works on a split of either R or L, uses tagging to identify with is original table
+    - Input: (K: null, V : a record from a split of either R or L)
+    - Output: (composite_key, tagged record) with composite_key = (join key, tag)
+
+Partition phase: 
+    - Input: composite_key K
+    - Output: partition of K which is hashcode(K.join_key) % num of reducers
+
+Grouping phase: 
+    - Input: composite_key K1 and K2
+    - Output: group K1 and K2 if (K1.join_key == K2.join_key)
+
+Secondary sort phase:
+    - Input: composite_key K1 and K2
+    - Output: K1 &lt; K2 (if K1.tag == ref &amp;&amp; K2.tag == log)
+
+Reduce phase:
+    - Input: K′: a composite key with the join key and the tag, LIST V': records for K', first from R, then L
+    - Buffer records from R (Br) - **only R**
+    - Performs a cross-product between records in set of R and L.
+    - Output: (null, r*l) with r*l is joined record
+</code></pre>
+
+<p><strong>Potential problem:</strong> Both versions (Standard Repartition Join and Improved Repartition Join) include two major sources of overhead that can hurt performance. In particular, both L and R have to be sorted and sent over the network during the shuffle phase of MapReduce.</p>
+
+<h1>
+<a id="directed-join" class="anchor" href="#directed-join" aria-hidden="true"><span class="octicon octicon-link"></span></a>Directed Join</h1>
+
+<p>The shuffle overhead in the repartition join can be decreased if both L and R have already been partitioned on the join key before the join operation. This can be accomplished by pre-partitioning L on the join key as log records are generated and by pre-partitioning R on the join key when it is loaded into the DFS. Then at query time, matching partitions from L and R can be directly joined</p>
+
+<pre><code>Inits:
+    - If Ri not exists in local storage then remotely retrieve Ri and store locally HRi ← build a hash table from Ri
+
+Map phase: 
+    - Input: (K: null, V: a record from a split of Li)
+    - Output: join V with HRi by join key of V and join key of HRi
+</code></pre>
+
+<p>We can see directed join only store a hash table of Ri (part of R), which is small, so it is avoid run out of memory in the case of R is big or L table is skewed. The disadvantage of this approach is that R and L must be pre-partitioning.</p>
+
+<h1>
+<a id="broadcast-join" class="anchor" href="#broadcast-join" aria-hidden="true"><span class="octicon octicon-link"></span></a>Broadcast Join</h1>
+
+<p>Usually, R is much smaller than L. To avoid overhead due to storing and sending both tables, we can simply <strong>broadcast</strong> only R.</p>
+
+<pre><code>Init phase:
+    - if R not exist in local storage then
+        remotely retrieve R
+        partition R into p chunks R1..Rp save R1..Rp to local storage
+
+    if R &lt; a split of L then
+        HR ← build a hash table from R1..Rp
+    else
+        HL1 ..HLp ← initialize p hash tables for L
+
+Map phase: 
+    - Input: (K: null, V : a record from an L split)
+    - Output: join V with HR or HLi (if HR is null)
+</code></pre>
+
+<p>The purpose of <strong>init phase</strong> is to hope that not all partitions of R have to be loaded in memory during the join. Besides that, to optimize the memory, the smaller of R and the split of L is chosen to build the hash table. </p>
+
+<p>Note that across map tasks, the partitions of R may be reloaded several times, since each map task runs as a separate process.</p>
+
+<h1>
+<a id="semi-join" class="anchor" href="#semi-join" aria-hidden="true"><span class="octicon octicon-link"></span></a>Semi Join</h1>
+
+<p>This approach for the situation that R is large but many records in R may not be actually referenced by any records in table L. If we use <strong>broadcast join</strong>, there will be a large portion of the records in R that are shipped across the network (via the DFS) and loaded in the hash table are not used by the join. For a summary, we use semi Join to avoid sending the records in R over the network that will not join with L.</p>
+
+<pre><code>Phase 1: Extract unique join keys in L to a single file L.uk (which is)
+
+Phase 2: Use L.uk to filter referenced R records; generate a file Ri for each R split
+
+Phase 3: Broadcast all Ri to each L split for the final join
+</code></pre>
+
+<p>Although semi-join avoids sending the records in R over the network that will not join with L, it does this at the cost of an extra scan of L.</p>
+
+<h1>
+<a id="per-split-semi-join" class="anchor" href="#per-split-semi-join" aria-hidden="true"><span class="octicon octicon-link"></span></a>Per-Split Semi-Join</h1>
+
+<p>One problem with semi-join is that not every record in the filtered version of R will join with a particular split Li of L. The per-split semi-join is designed to address this problem.</p>
+
+<pre><code>Phase 1: Extract unique join keys for each L split to Li.uk
+
+Phase 2: Use Li.uk to filter referenced R; generate a file RLi for each Li
+
+Phase 3: Directed join between each RLi and Li pair
+</code></pre>
+
+<p>Compared to the basic semi-join, the per-split semi-join makes the third phase even cheaper since it moves just the records in R that will join with each split of L. However, its first two phases are more involved.</p>
+
+      <footer class="site-footer">
+        <span class="site-footer-owner"><a href="https://github.com/nncsang/Hadoop-LogProc">Hadoop-logproc</a> is maintained by <a href="https://github.com/nncsang">nncsang</a>.</span>
+
+        <span class="site-footer-credits">This page was generated by <a href="https://pages.github.com">GitHub Pages</a> using the <a href="https://github.com/jasonlong/cayman-theme">Cayman theme</a> by <a href="https://twitter.com/jasonlong">Jason Long</a>.</span>
+      </footer>
+
+    </section>
+
+  
+  </body>
+</html>
